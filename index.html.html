@@ -1,0 +1,780 @@
+<!DOCTYPE html>
+<html lang="ca">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bon Dia — Dashboard Matinal</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=DM+Mono:wght@300;400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ink: #1a1a1a;
+    --paper: #f5f0e8;
+    --cream: #ede8dc;
+    --accent: #c8652a;
+    --accent2: #2a6bc8;
+    --muted: #8a8070;
+    --green: #2d6a4f;
+    --red: #9b2335;
+    --border: #d4cdc0;
+    --shadow: rgba(26,26,26,0.08);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: 'DM Sans', sans-serif;
+    min-height: 100vh;
+    position: relative;
+    overflow-x: hidden;
+  }
+
+  body::before {
+    content: '';
+    position: fixed; inset: 0;
+    background-image: 
+      url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23c8b89a' fill-opacity='0.08'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .container {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 40px 24px 80px;
+    position: relative;
+    z-index: 1;
+  }
+
+  /* HEADER */
+  header {
+    border-bottom: 2px solid var(--ink);
+    padding-bottom: 24px;
+    margin-bottom: 40px;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+  }
+
+  .header-left {}
+  .masthead {
+    font-family: 'Playfair Display', serif;
+    font-size: clamp(32px, 5vw, 56px);
+    font-weight: 700;
+    line-height: 1;
+    letter-spacing: -1px;
+  }
+  .masthead span { color: var(--accent); font-style: italic; }
+
+  .dateline {
+    font-family: 'DM Mono', monospace;
+    font-size: 12px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    margin-top: 6px;
+  }
+
+  .header-right {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 8px;
+  }
+
+  .refresh-btn {
+    background: var(--ink);
+    color: var(--paper);
+    border: none;
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    padding: 10px 20px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .refresh-btn:hover { background: var(--accent); }
+  .refresh-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  .status-pill {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    padding: 3px 10px;
+    border-radius: 20px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+  .status-pill.idle { background: var(--cream); color: var(--muted); border: 1px solid var(--border); }
+  .status-pill.loading { background: #fff3cd; color: #856404; border: 1px solid #ffc107; animation: pulse 1s infinite; }
+  .status-pill.done { background: #d4edda; color: var(--green); border: 1px solid #28a745; }
+  .status-pill.error { background: #f8d7da; color: var(--red); border: 1px solid #dc3545; }
+
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.6} }
+
+  /* GRID */
+  .grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 32px;
+  }
+  @media (max-width: 768px) { .grid { grid-template-columns: 1fr; } }
+
+  /* SECTIONS */
+  .section-header {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    margin-bottom: 20px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--border);
+  }
+  .section-title {
+    font-family: 'Playfair Display', serif;
+    font-size: 20px;
+    font-weight: 700;
+  }
+  .section-count {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    color: var(--muted);
+    background: var(--cream);
+    padding: 2px 8px;
+    border: 1px solid var(--border);
+  }
+
+  /* CALENDAR */
+  .calendar-section { grid-column: 1 / -1; }
+
+  .events-list { display: flex; flex-direction: column; gap: 10px; }
+
+  .event-card {
+    display: flex;
+    align-items: stretch;
+    gap: 0;
+    background: white;
+    border: 1px solid var(--border);
+    box-shadow: 2px 2px 0 var(--shadow);
+    overflow: hidden;
+    transition: transform 0.1s;
+  }
+  .event-card:hover { transform: translateY(-1px); }
+
+  .event-time {
+    background: var(--ink);
+    color: var(--paper);
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    padding: 12px 14px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    min-width: 72px;
+    text-align: center;
+    line-height: 1.4;
+  }
+  .event-time.all-day { background: var(--accent2); font-size: 9px; text-transform: uppercase; letter-spacing: 1px; }
+
+  .event-body { padding: 12px 16px; flex: 1; }
+  .event-title { font-weight: 500; font-size: 14px; margin-bottom: 3px; }
+  .event-meta { font-size: 12px; color: var(--muted); font-family: 'DM Mono', monospace; }
+
+  /* EMAIL CARDS */
+  .email-card {
+    background: white;
+    border: 1px solid var(--border);
+    box-shadow: 2px 2px 0 var(--shadow);
+    margin-bottom: 12px;
+    overflow: hidden;
+  }
+
+  .email-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    padding: 14px 16px 10px;
+    cursor: pointer;
+    user-select: none;
+  }
+  .email-header:hover { background: var(--cream); }
+
+  .email-from { font-weight: 500; font-size: 13px; }
+  .email-subject { font-size: 12px; color: var(--muted); margin-top: 2px; font-style: italic; }
+
+  .priority-badge {
+    font-family: 'DM Mono', monospace;
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    padding: 3px 8px;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+  .priority-badge.urgent { background: var(--red); color: white; }
+  .priority-badge.wait { background: var(--cream); color: var(--muted); border: 1px solid var(--border); }
+
+  .email-body { padding: 0 16px; max-height: 0; overflow: hidden; transition: max-height 0.3s ease, padding 0.3s; }
+  .email-body.open { max-height: 600px; padding: 0 16px 16px; }
+
+  .email-summary {
+    font-size: 13px;
+    color: #444;
+    line-height: 1.6;
+    padding: 10px 0;
+    border-top: 1px dashed var(--border);
+  }
+
+  .draft-box {
+    background: #f0f7ff;
+    border: 1px solid #cce0ff;
+    padding: 12px 14px;
+    margin-top: 10px;
+    font-size: 13px;
+    line-height: 1.6;
+    white-space: pre-wrap;
+    font-family: 'DM Sans', sans-serif;
+    position: relative;
+  }
+  .draft-label {
+    font-family: 'DM Mono', monospace;
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    color: var(--accent2);
+    margin-bottom: 6px;
+  }
+
+  .email-actions { display: flex; gap: 8px; margin-top: 12px; }
+
+  .btn {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    padding: 7px 14px;
+    border: 1px solid var(--ink);
+    background: transparent;
+    cursor: pointer;
+    transition: all 0.1s;
+  }
+  .btn:hover { background: var(--ink); color: var(--paper); }
+  .btn.primary { background: var(--ink); color: var(--paper); }
+  .btn.primary:hover { background: var(--accent); border-color: var(--accent); }
+  .btn.success { border-color: var(--green); color: var(--green); }
+  .btn.success:hover { background: var(--green); color: white; }
+
+  /* NO REPLY SECTION */
+  .no-reply-list { display: flex; flex-direction: column; gap: 8px; }
+  .no-reply-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 14px;
+    background: white;
+    border: 1px solid var(--border);
+    font-size: 13px;
+    opacity: 1;
+    transition: opacity 0.3s;
+  }
+  .no-reply-item.marking { opacity: 0.4; }
+  .no-reply-item .nr-from { font-weight: 500; }
+  .no-reply-item .nr-subject { font-size: 12px; color: var(--muted); font-style: italic; }
+  .mark-read-btn {
+    font-family: 'DM Mono', monospace;
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    padding: 4px 10px;
+    border: 1px solid var(--green);
+    background: transparent;
+    color: var(--green);
+    cursor: pointer;
+    white-space: nowrap;
+    flex-shrink: 0;
+    margin-left: 12px;
+  }
+  .mark-read-btn:hover { background: var(--green); color: white; }
+
+  /* EMPTY/LOADING states */
+  .placeholder {
+    text-align: center;
+    padding: 40px 20px;
+    color: var(--muted);
+    font-family: 'DM Mono', monospace;
+    font-size: 12px;
+    border: 1px dashed var(--border);
+  }
+  .placeholder svg { display: block; margin: 0 auto 12px; opacity: 0.3; }
+
+  /* TOAST */
+  .toast {
+    position: fixed;
+    bottom: 24px; right: 24px;
+    background: var(--ink);
+    color: var(--paper);
+    font-family: 'DM Mono', monospace;
+    font-size: 12px;
+    padding: 12px 20px;
+    transform: translateY(80px);
+    opacity: 0;
+    transition: all 0.3s;
+    z-index: 999;
+  }
+  .toast.show { transform: translateY(0); opacity: 1; }
+
+  /* SUMMARY BAR */
+  .summary-bar {
+    background: var(--ink);
+    color: var(--paper);
+    padding: 16px 24px;
+    margin-bottom: 32px;
+    display: flex;
+    gap: 32px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+  .summary-stat { text-align: center; }
+  .summary-num {
+    font-family: 'Playfair Display', serif;
+    font-size: 28px;
+    font-weight: 700;
+    color: var(--accent);
+  }
+  .summary-label {
+    font-family: 'DM Mono', monospace;
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    color: #aaa;
+  }
+  .summary-bar .greeting {
+    flex: 1;
+    font-family: 'Playfair Display', serif;
+    font-style: italic;
+    font-size: 15px;
+    color: #ccc;
+    text-align: right;
+  }
+
+  .chevron { transition: transform 0.2s; display: inline-block; margin-left: 8px; }
+  .chevron.open { transform: rotate(180deg); }
+
+  /* Column labels */
+  .col-label {
+    font-family: 'DM Mono', monospace;
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 3px;
+    color: var(--muted);
+    margin-bottom: 6px;
+  }
+</style>
+</head>
+<body>
+
+<div class="container">
+  <header>
+    <div class="header-left">
+      <div class="masthead">Bon <span>Dia,</span> Aleix.</div>
+      <div class="dateline" id="dateline">—</div>
+    </div>
+    <div class="header-right">
+      <span class="status-pill idle" id="status-pill">Esperant</span>
+      <button class="refresh-btn" id="refresh-btn" onclick="loadDashboard()">↻ Carregar el dia</button>
+    </div>
+  </header>
+
+  <div id="summary-bar" style="display:none" class="summary-bar">
+    <div class="summary-stat">
+      <div class="summary-num" id="sum-events">0</div>
+      <div class="summary-label">Events</div>
+    </div>
+    <div class="summary-stat">
+      <div class="summary-num" id="sum-urgent">0</div>
+      <div class="summary-label">Urgents</div>
+    </div>
+    <div class="summary-stat">
+      <div class="summary-num" id="sum-wait">0</div>
+      <div class="summary-label">Pot esperar</div>
+    </div>
+    <div class="summary-stat">
+      <div class="summary-num" id="sum-norely">0</div>
+      <div class="summary-label">Sense resposta</div>
+    </div>
+    <div class="greeting" id="greeting-text"></div>
+  </div>
+
+  <div class="grid" id="main-grid">
+    <div class="placeholder" style="grid-column:1/-1">
+      <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+      Prem «Carregar el dia» per veure els teus events i correus d'avui.
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ─── UTILITIES ────────────────────────────────────────────────────────────────
+const $ = id => document.getElementById(id);
+const today = new Date();
+
+function setDateline() {
+  const days = ['Diumenge','Dilluns','Dimarts','Dimecres','Dijous','Divendres','Dissabte'];
+  const months = ['gener','febrer','març','abril','maig','juny','juliol','agost','setembre','octubre','novembre','desembre'];
+  $('dateline').textContent = `${days[today.getDay()]}, ${today.getDate()} de ${months[today.getMonth()]} de ${today.getFullYear()}`;
+}
+setDateline();
+
+function setStatus(state, text) {
+  const el = $('status-pill');
+  el.className = `status-pill ${state}`;
+  el.textContent = text;
+}
+
+function showToast(msg, duration=3000) {
+  const t = $('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), duration);
+}
+
+function formatTime(dt) {
+  if (!dt) return 'Tot el dia';
+  const d = new Date(dt);
+  return d.toLocaleTimeString('ca', {hour:'2-digit', minute:'2-digit'});
+}
+
+// ─── MCP API CALLS ────────────────────────────────────────────────────────────
+async function callClaude(messages, system, mcp_servers) {
+  const body = {
+    model: "claude-sonnet-4-20250514",
+    max_tokens: 4000,
+    system,
+    messages,
+    mcp_servers
+  };
+  const resp = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body)
+  });
+  if (!resp.ok) throw new Error(`API error: ${resp.status}`);
+  return resp.json();
+}
+
+const MCP_SERVERS = [
+  { type: "url", url: "https://calendarmcp.googleapis.com/mcp/v1", name: "google-calendar" },
+  { type: "url", url: "https://gmailmcp.googleapis.com/mcp/v1", name: "gmail" }
+];
+
+// ─── CÀRREGA RÀPIDA DES DE N8N/POSTGRESQL ─────────────────────────────────────
+// Si n8n ja ha preprocessat els emails a les 7:30h, el dashboard els carrega
+// directament des de la DB via un webhook de n8n (instantani, sense esperar APIs)
+const N8N_WEBHOOK_URL = "https://n8n-production-b229.up.railway.app/webhook/dashboard-emails-avui";
+
+async function fetchEmailsFromDB() {
+  try {
+    const resp = await fetch(N8N_WEBHOOK_URL, { method: "GET" });
+    if (!resp.ok) throw new Error("n8n webhook no disponible");
+    const data = await resp.json();
+    if (!data || !data.emails) throw new Error("Format invàlid");
+    return { fromDB: true, emails: data.emails };
+  } catch(e) {
+    console.warn("DB no disponible, usant APIs en temps real:", e.message);
+    return { fromDB: false, emails: null };
+  }
+}
+
+// ─── FETCH CALENDAR ────────────────────────────────────────────────────────────
+async function fetchCalendarEvents() {
+  const todayStr = today.toISOString().split('T')[0];
+  const data = await callClaude(
+    [{ role: "user", content: `Dona'm TOTS els events del calendari d'avui (${todayStr}). Respon ÚNICAMENT amb JSON, sense cap text addicional ni backticks de markdown. Format: {"events": [{"title": "...", "start": "HH:MM o null si tot el dia", "end": "HH:MM o null", "allDay": true/false, "location": "...", "description": "..."}]}` }],
+    "Ets un assistent que accedeix al Google Calendar de l'usuari. Sempre retornes JSON pur sense markdown.",
+    MCP_SERVERS
+  );
+  
+  const textBlock = data.content.find(b => b.type === 'text');
+  if (!textBlock) return [];
+  
+  try {
+    const clean = textBlock.text.replace(/```json|```/g, '').trim();
+    const parsed = JSON.parse(clean);
+    return parsed.events || [];
+  } catch(e) {
+    console.warn('Calendar parse error:', e, textBlock.text);
+    return [];
+  }
+}
+
+// ─── FETCH & ANALYZE EMAILS ────────────────────────────────────────────────────
+async function fetchAndAnalyzeEmails() {
+  const todayStr = today.toISOString().split('T')[0];
+  const data = await callClaude(
+    [{ role: "user", content: `Fes el següent en un sol pas:
+1. Obté tots els correus rebuts avui (${todayStr}) a la safata d'entrada.
+2. Per cada correu, classifica'l com: "cal_resposta_urgent", "cal_resposta_espera" o "sense_resposta".
+3. Per els que necessiten resposta, crea un esborrany breu en el mateix idioma del correu original.
+4. Retorna ÚNICAMENT JSON pur sense cap text ni backticks. Format exacte:
+{
+  "emails": [
+    {
+      "id": "gmail_message_id",
+      "from": "Nom <email>",
+      "subject": "...",
+      "snippet": "resum breu de 1-2 frases",
+      "category": "cal_resposta_urgent|cal_resposta_espera|sense_resposta",
+      "draft": "esborrany de resposta o null"
+    }
+  ]
+}` }],
+    "Ets un assistent que accedeix al Gmail de l'usuari. Analitzes emails i crees esborranys. Retornes SEMPRE JSON pur sense markdown.",
+    MCP_SERVERS
+  );
+
+  const textBlock = data.content.find(b => b.type === 'text');
+  if (!textBlock) return [];
+
+  try {
+    const clean = textBlock.text.replace(/```json|```/g, '').trim();
+    const parsed = JSON.parse(clean);
+    return parsed.emails || [];
+  } catch(e) {
+    console.warn('Email parse error:', e, textBlock.text);
+    return [];
+  }
+}
+
+// ─── MARK AS READ ─────────────────────────────────────────────────────────────
+async function markAsRead(emailId, itemEl) {
+  itemEl.classList.add('marking');
+  try {
+    await callClaude(
+      [{ role: "user", content: `Marca com a llegit el correu amb ID: ${emailId}. Confirma quan estigui fet.` }],
+      "Ets un assistent que gestiona el Gmail de l'usuari. Executa les accions sol·licitades.",
+      MCP_SERVERS
+    );
+    itemEl.style.transition = 'all 0.4s';
+    itemEl.style.maxHeight = '0';
+    itemEl.style.overflow = 'hidden';
+    itemEl.style.opacity = '0';
+    itemEl.style.marginBottom = '0';
+    itemEl.style.paddingTop = '0';
+    itemEl.style.paddingBottom = '0';
+    setTimeout(() => itemEl.remove(), 400);
+    showToast('✓ Marcat com a llegit');
+  } catch(e) {
+    itemEl.classList.remove('marking');
+    showToast('Error en marcar com a llegit');
+  }
+}
+
+// ─── SEND DRAFT ───────────────────────────────────────────────────────────────
+async function sendDraft(emailId, draftText, btn) {
+  btn.disabled = true;
+  btn.textContent = 'Enviant...';
+  try {
+    await callClaude(
+      [{ role: "user", content: `Crea un esborrany de resposta al correu amb ID ${emailId} amb el contingut següent i guarda'l com a esborrany a Gmail (draft, no enviar):\n\n${draftText}` }],
+      "Ets un assistent que gestiona el Gmail de l'usuari. Executa les accions sol·licitades.",
+      MCP_SERVERS
+    );
+    btn.textContent = '✓ Desat';
+    btn.className = 'btn success';
+    showToast('✓ Esborrany desat a Gmail');
+  } catch(e) {
+    btn.disabled = false;
+    btn.textContent = 'Desar esborrany';
+    showToast('Error en desar esborrany');
+  }
+}
+
+// ─── RENDER ────────────────────────────────────────────────────────────────────
+function renderCalendar(events) {
+  if (!events.length) return `<div class="placeholder">Cap event avui 🎉</div>`;
+  return `<div class="events-list">${events.map(ev => `
+    <div class="event-card">
+      <div class="event-time ${ev.allDay ? 'all-day' : ''}">
+        ${ev.allDay ? 'Tot el dia' : `${ev.start || '–'}<br>${ev.end ? '→ '+ev.end : ''}`}
+      </div>
+      <div class="event-body">
+        <div class="event-title">${ev.title}</div>
+        ${ev.location ? `<div class="event-meta">📍 ${ev.location}</div>` : ''}
+        ${ev.description ? `<div class="event-meta" style="margin-top:4px">${ev.description.substring(0,80)}${ev.description.length>80?'…':''}</div>` : ''}
+      </div>
+    </div>`).join('')}</div>`;
+}
+
+function renderEmailCard(em, idx) {
+  const isUrgent = em.category === 'cal_resposta_urgent';
+  const badge = isUrgent
+    ? `<span class="priority-badge urgent">⚡ Urgent</span>`
+    : `<span class="priority-badge wait">○ Pot esperar</span>`;
+
+  return `
+  <div class="email-card" id="email-${idx}">
+    <div class="email-header" onclick="toggleEmail(${idx})">
+      <div>
+        <div class="email-from">${em.from}</div>
+        <div class="email-subject">${em.subject}</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px">
+        ${badge}
+        <span class="chevron" id="chev-${idx}">▾</span>
+      </div>
+    </div>
+    <div class="email-body" id="body-${idx}">
+      <div class="email-summary">${em.snippet}</div>
+      ${em.draft ? `
+      <div class="draft-box">
+        <div class="draft-label">✎ Esborrany suggerit</div>
+        <div id="draft-text-${idx}" contenteditable="true">${em.draft}</div>
+      </div>
+      <div class="email-actions">
+        <button class="btn primary" onclick="saveDraft('${em.id}', ${idx}, this)">Desar esborrany</button>
+        <button class="btn" onclick="toggleEmail(${idx})">Tancar</button>
+      </div>` : ''}
+    </div>
+  </div>`;
+}
+
+function toggleEmail(idx) {
+  const body = $(`body-${idx}`);
+  const chev = $(`chev-${idx}`);
+  body.classList.toggle('open');
+  chev.classList.toggle('open');
+}
+
+async function saveDraft(emailId, idx, btn) {
+  const draftEl = $(`draft-text-${idx}`);
+  await sendDraft(emailId, draftEl.textContent, btn);
+}
+
+function renderNoReply(emails) {
+  if (!emails.length) return `<div class="placeholder">No hi ha correus pendents de llegir 📭</div>`;
+  return emails.map((em, i) => `
+    <div class="no-reply-item" id="nr-${i}">
+      <div>
+        <div class="nr-from">${em.from}</div>
+        <div class="nr-subject">${em.subject}</div>
+      </div>
+      <button class="mark-read-btn" onclick="doMarkRead('${em.id}', 'nr-${i}')">✓ Marcar llegit</button>
+    </div>`).join('');
+}
+
+async function doMarkRead(emailId, elId) {
+  const el = $(elId);
+  await markAsRead(emailId, el);
+}
+
+// ─── MAIN LOAD ────────────────────────────────────────────────────────────────
+async function loadDashboard() {
+  const btn = $('refresh-btn');
+  btn.disabled = true;
+  setStatus('loading', 'Carregant...');
+  $('main-grid').innerHTML = `<div class="placeholder" style="grid-column:1/-1">
+    <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
+    Connectant amb Google Calendar i Gmail…
+  </div>`;
+
+  try {
+    setStatus('loading', 'Comprovant cache n8n...');
+    // Intentar càrrega ràpida des de PostgreSQL via n8n
+    const dbResult = await fetchEmailsFromDB();
+    
+    setStatus('loading', 'Calendar...');
+    let emails;
+    if (dbResult.fromDB) {
+      emails = dbResult.emails;
+      showToast('⚡ Dades carregades des de la base de dades (n8n)');
+    } else {
+      setStatus('loading', 'Analitzant emails...');
+      emails = await fetchAndAnalyzeEmails();
+    }
+    
+    const [events] = await Promise.all([fetchCalendarEvents()]);
+
+    const urgent = emails.filter(e => e.category === 'cal_resposta_urgent');
+    const wait   = emails.filter(e => e.category === 'cal_resposta_espera');
+    const norely = emails.filter(e => e.category === 'sense_resposta');
+
+    // Update summary
+    $('sum-events').textContent = events.length;
+    $('sum-urgent').textContent = urgent.length;
+    $('sum-wait').textContent   = wait.length;
+    $('sum-norely').textContent = norely.length;
+    $('greeting-text').textContent = `${events.length} events · ${urgent.length+wait.length} correus per respondre`;
+    $('summary-bar').style.display = 'flex';
+
+    // Auto mark no-reply as read
+    for (const em of norely) {
+      try {
+        await callClaude(
+          [{ role: "user", content: `Marca com a llegit el correu ID: ${em.id}` }],
+          "Gestiona el Gmail. Executa les accions.",
+          MCP_SERVERS
+        );
+      } catch(e) { /* silent */ }
+    }
+
+    // Render
+    $('main-grid').innerHTML = `
+      <!-- CALENDAR full width -->
+      <div class="calendar-section" style="grid-column:1/-1">
+        <div class="section-header">
+          <span class="section-title">📅 Events d'avui</span>
+          <span class="section-count">${events.length} event${events.length!==1?'s':''}</span>
+        </div>
+        ${renderCalendar(events)}
+      </div>
+
+      <!-- URGENT -->
+      <div>
+        <div class="col-label">Necessiten resposta</div>
+        <div class="section-header">
+          <span class="section-title">⚡ Importants</span>
+          <span class="section-count">${urgent.length}</span>
+        </div>
+        ${urgent.length ? urgent.map((em,i)=>renderEmailCard(em,`u${i}`)).join('') : '<div class="placeholder">Cap correu urgent 🎉</div>'}
+
+        <div style="margin-top:28px">
+          <div class="col-label" style="margin-bottom:10px">Necessiten resposta</div>
+          <div class="section-header">
+            <span class="section-title">○ Pot esperar</span>
+            <span class="section-count">${wait.length}</span>
+          </div>
+          ${wait.length ? wait.map((em,i)=>renderEmailCard(em,`w${i}`)).join('') : '<div class="placeholder">Cap correu pendent 👌</div>'}
+        </div>
+      </div>
+
+      <!-- NO REPLY -->
+      <div>
+        <div class="col-label">Sense resposta · marcats com a llegits automàticament</div>
+        <div class="section-header">
+          <span class="section-title">📬 Informatius</span>
+          <span class="section-count">${norely.length}</span>
+        </div>
+        <div class="no-reply-list">${renderNoReply(norely)}</div>
+      </div>
+    `;
+
+    setStatus('done', 'Actualitzat');
+    showToast('Dashboard carregat ✓');
+  } catch(err) {
+    console.error(err);
+    setStatus('error', 'Error');
+    $('main-grid').innerHTML = `<div class="placeholder" style="grid-column:1/-1;border-color:#dc3545;color:#9b2335">
+      ⚠ Error en carregar: ${err.message}<br><br>
+      <small>Assegura't que tens els connectors de Google Calendar i Gmail activats a Claude.ai</small>
+    </div>`;
+    showToast('Error en carregar el dashboard');
+  } finally {
+    btn.disabled = false;
+  }
+}
+</script>
+</body>
+</html>
