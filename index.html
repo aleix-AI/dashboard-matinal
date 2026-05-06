@@ -506,8 +506,8 @@ function renderNoReply(emails) {
   return emails.map((em, i) => `
     <div class="no-reply-item">
       <div>
-        <div class="nr-from">${em.from}</div>
-        <div class="nr-subject">${em.subject}</div>
+        <div class="nr-from">${em.from || em.from_email || '(sense remitent)'}</div>
+        <div class="nr-subject">${em.subject || '(sense assumpte)'}</div>
       </div>
     </div>`).join('');
 }
@@ -522,25 +522,30 @@ async function loadDashboard() {
   </div>`;
 
   try {
-    // Intentar llegir de la DB amb timeout curt (3 seg)
-    setStatus('loading', 'Comprovant dades del dia...');
+    // Sempre processar amb Claude via n8n (fresc cada vegada)
+    // Si ja hi ha dades recents a la DB (menys de 30 min), les usa directament
+    setStatus('loading', 'Comprovant dades recents...');
     let data = null;
+
     try {
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 3000);
+      const timeout = setTimeout(() => controller.abort(), 4000);
       const readResp = await fetch(N8N_WEBHOOK_READ, { signal: controller.signal });
       clearTimeout(timeout);
       const text = await readResp.text();
       if (text && text.trim().startsWith('{')) {
         const readData = JSON.parse(text);
-        if (readData.emails && readData.emails.length > 0) {
+        // Usar cache només si té dades vàlides amb from i subject
+        const valid = readData.emails && readData.emails.length > 0 &&
+                      readData.emails.some(e => e.from && e.from !== 'empty' && e.subject && e.subject !== 'empty');
+        if (valid) {
           data = readData;
           showToast('⚡ Dades carregades des de la DB');
         }
       }
-    } catch(e) { /* DB buida, timeout o error — continuem amb processament */ }
+    } catch(e) { /* continuar amb processament */ }
 
-    // Si no hi ha dades, processar ara amb Claude via n8n
+    // Si no hi ha dades vàlides, processar ara amb Claude
     if (!data) {
       setStatus('loading', 'Claude analitza els teus emails…');
       $('main-grid').innerHTML = `<div class="placeholder" style="grid-column:1/-1">
@@ -554,7 +559,7 @@ async function loadDashboard() {
       });
       const processText = await processResp.text();
       if (!processText || !processText.trim().startsWith('{')) {
-        throw new Error('El workflow de n8n no ha retornat dades. Ves a n8n i comprova que "Dashboard Matinal — Processar Ara" està actiu.');
+        throw new Error('n8n no ha retornat dades. Comprova que el workflow "Dashboard Matinal — Processar Ara" està actiu.');
       }
       data = JSON.parse(processText);
       showToast('✓ Emails analitzats per Claude');
