@@ -522,27 +522,41 @@ async function loadDashboard() {
   </div>`;
 
   try {
-    // Primer intentar llegir de la DB (ràpid)
+    // Intentar llegir de la DB amb timeout curt (3 seg)
     setStatus('loading', 'Comprovant dades del dia...');
-    let data;
-    const readResp = await fetch(N8N_WEBHOOK_READ);
-    if (readResp.ok) {
-      const readData = await readResp.json();
-      if (readData.emails && readData.emails.length > 0) {
-        data = readData;
-        showToast('⚡ Dades carregades des de la DB');
+    let data = null;
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 3000);
+      const readResp = await fetch(N8N_WEBHOOK_READ, { signal: controller.signal });
+      clearTimeout(timeout);
+      const text = await readResp.text();
+      if (text && text.trim().startsWith('{')) {
+        const readData = JSON.parse(text);
+        if (readData.emails && readData.emails.length > 0) {
+          data = readData;
+          showToast('⚡ Dades carregades des de la DB');
+        }
       }
-    }
-    // Si no hi ha dades, processar ara amb Claude
+    } catch(e) { /* DB buida, timeout o error — continuem amb processament */ }
+
+    // Si no hi ha dades, processar ara amb Claude via n8n
     if (!data) {
-      setStatus('loading', 'Processant emails amb Claude... (pot tardar 1-2 min)');
+      setStatus('loading', 'Claude analitza els teus emails…');
       $('main-grid').innerHTML = `<div class="placeholder" style="grid-column:1/-1">
         <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
-        Claude està analitzant els teus emails… (1-2 minuts)
+        Claude està analitzant els teus emails… pot tardar 1-2 minuts
       </div>`;
-      const processResp = await fetch(N8N_WEBHOOK_PROCESS, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({}) });
-      if (!processResp.ok) throw new Error(`Error processant: ${processResp.status}`);
-      data = await processResp.json();
+      const processResp = await fetch(N8N_WEBHOOK_PROCESS, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({})
+      });
+      const processText = await processResp.text();
+      if (!processText || !processText.trim().startsWith('{')) {
+        throw new Error('El workflow de n8n no ha retornat dades. Ves a n8n i comprova que "Dashboard Matinal — Processar Ara" està actiu.');
+      }
+      data = JSON.parse(processText);
       showToast('✓ Emails analitzats per Claude');
     }
 
