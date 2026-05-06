@@ -420,7 +420,8 @@
 const $ = id => document.getElementById(id);
 const today = new Date();
 
-const N8N_WEBHOOK = "https://n8n-production-b229.up.railway.app/webhook/dashboard-emails-avui";
+const N8N_WEBHOOK_READ = "https://n8n-production-b229.up.railway.app/webhook/dashboard-emails-avui";
+const N8N_WEBHOOK_PROCESS = "https://n8n-production-b229.up.railway.app/webhook/dashboard-process-now";
 
 function setDateline() {
   const days = ['Diumenge','Dilluns','Dimarts','Dimecres','Dijous','Divendres','Dissabte'];
@@ -521,9 +522,29 @@ async function loadDashboard() {
   </div>`;
 
   try {
-    const resp = await fetch(N8N_WEBHOOK);
-    if (!resp.ok) throw new Error(`n8n error: ${resp.status}`);
-    const data = await resp.json();
+    // Primer intentar llegir de la DB (ràpid)
+    setStatus('loading', 'Comprovant dades del dia...');
+    let data;
+    const readResp = await fetch(N8N_WEBHOOK_READ);
+    if (readResp.ok) {
+      const readData = await readResp.json();
+      if (readData.emails && readData.emails.length > 0) {
+        data = readData;
+        showToast('⚡ Dades carregades des de la DB');
+      }
+    }
+    // Si no hi ha dades, processar ara amb Claude
+    if (!data) {
+      setStatus('loading', 'Processant emails amb Claude... (pot tardar 1-2 min)');
+      $('main-grid').innerHTML = `<div class="placeholder" style="grid-column:1/-1">
+        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
+        Claude està analitzant els teus emails… (1-2 minuts)
+      </div>`;
+      const processResp = await fetch(N8N_WEBHOOK_PROCESS, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({}) });
+      if (!processResp.ok) throw new Error(`Error processant: ${processResp.status}`);
+      data = await processResp.json();
+      showToast('✓ Emails analitzats per Claude');
+    }
 
     const emails = data.emails || [];
     const events = data.events || [];
