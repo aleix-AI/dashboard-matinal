@@ -417,9 +417,10 @@
 <div class="toast" id="toast"></div>
 
 <script>
-// ─── UTILITIES ────────────────────────────────────────────────────────────────
 const $ = id => document.getElementById(id);
 const today = new Date();
+
+const N8N_WEBHOOK = "https://n8n-production-b229.up.railway.app/webhook/dashboard-emails-avui";
 
 function setDateline() {
   const days = ['Diumenge','Dilluns','Dimarts','Dimecres','Dijous','Divendres','Dissabte'];
@@ -441,160 +442,8 @@ function showToast(msg, duration=3000) {
   setTimeout(() => t.classList.remove('show'), duration);
 }
 
-function formatTime(dt) {
-  if (!dt) return 'Tot el dia';
-  const d = new Date(dt);
-  return d.toLocaleTimeString('ca', {hour:'2-digit', minute:'2-digit'});
-}
-
-// ─── MCP API CALLS ────────────────────────────────────────────────────────────
-async function callClaude(messages, system, mcp_servers) {
-  const body = {
-    model: "claude-sonnet-4-20250514",
-    max_tokens: 4000,
-    system,
-    messages,
-    mcp_servers
-  };
-  const resp = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body)
-  });
-  if (!resp.ok) throw new Error(`API error: ${resp.status}`);
-  return resp.json();
-}
-
-const MCP_SERVERS = [
-  { type: "url", url: "https://calendarmcp.googleapis.com/mcp/v1", name: "google-calendar" },
-  { type: "url", url: "https://gmailmcp.googleapis.com/mcp/v1", name: "gmail" }
-];
-
-// ─── CÀRREGA RÀPIDA DES DE N8N/POSTGRESQL ─────────────────────────────────────
-// Si n8n ja ha preprocessat els emails a les 7:30h, el dashboard els carrega
-// directament des de la DB via un webhook de n8n (instantani, sense esperar APIs)
-const N8N_WEBHOOK_URL = "https://n8n-production-b229.up.railway.app/webhook/dashboard-emails-avui";
-
-async function fetchEmailsFromDB() {
-  try {
-    const resp = await fetch(N8N_WEBHOOK_URL, { method: "GET" });
-    if (!resp.ok) throw new Error("n8n webhook no disponible");
-    const data = await resp.json();
-    if (!data || !data.emails) throw new Error("Format invàlid");
-    return { fromDB: true, emails: data.emails };
-  } catch(e) {
-    console.warn("DB no disponible, usant APIs en temps real:", e.message);
-    return { fromDB: false, emails: null };
-  }
-}
-
-// ─── FETCH CALENDAR ────────────────────────────────────────────────────────────
-async function fetchCalendarEvents() {
-  const todayStr = today.toISOString().split('T')[0];
-  const data = await callClaude(
-    [{ role: "user", content: `Accedeix al Google Calendar i dona'm TOTS els events d'avui (${todayStr}). Respon ÚNICAMENT amb un objecte JSON vàlid, sense cap text abans ni després, sense backticks. Exemple de format: {"events":[{"title":"Reunio","start":"09:00","end":"10:00","allDay":false,"location":"","description":""}]}` }],
-    "Ets un assistent que accedeix al Google Calendar. Retornes ÚNICAMENT JSON pur i vàlid, sense markdown, sense text explicatiu, sense backticks. Mai escrius text fora del JSON.",
-    MCP_SERVERS
-  );
-  
-  const textBlock = data.content.find(b => b.type === 'text');
-  if (!textBlock) return [];
-  
-  try {
-    // Intentar trobar JSON vàlid a la resposta
-    const raw = textBlock.text.trim();
-    // Primer intent: resposta directa
-    const clean = raw.replace(/```json|```/g, '').trim();
-    try { return JSON.parse(clean).events || []; } catch(e1) {}
-    // Segon intent: extreure objecte JSON
-    const match = raw.match(/\{[^]*"events"[^]*\}/);
-    if (match) { try { return JSON.parse(match[0]).events || []; } catch(e2) {} }
-    // Tercer intent: extreure array
-    const arrMatch = raw.match(/\[[^]*\]/);
-    if (arrMatch) { try { return JSON.parse(arrMatch[0]) || []; } catch(e3) {} }
-    console.warn('Calendar parse error - resposta:', raw.substring(0, 200));
-    return [];
-  } catch(e) {
-    console.warn('Calendar parse error:', e);
-    return [];
-  }
-}
-
-// ─── FETCH & ANALYZE EMAILS ────────────────────────────────────────────────────
-async function fetchAndAnalyzeEmails() {
-  const todayStr = today.toISOString().split('T')[0];
-  const data = await callClaude(
-    [{ role: "user", content: `Accedeix al Gmail. Obté tots els correus NO llegits d'avui (${todayStr}). Classifica cada correu i si necessita resposta crea un esborrany breu en l'idioma del correu. Respon ÚNICAMENT amb JSON vàlid, sense text ni backticks. Format: {"emails":[{"id":"id_gmail","from":"nom <email>","subject":"assumpte","snippet":"resum 1-2 frases","category":"cal_resposta_urgent","draft":"text esborrany o null"}]}. Categories: cal_resposta_urgent, cal_resposta_espera, sense_resposta. Emails de Global6tem o iREAD sempre urgent. Newsletters i noreply sempre sense_resposta.` }],
-    "Ets un assistent que accedeix al Gmail de l'usuari via MCP. Retornes ÚNICAMENT JSON pur i vàlid. Mai escrius text fora del JSON. Cap introducció, cap explicació, cap markdown.",
-    MCP_SERVERS
-  );
-
-  const textBlock = data.content.find(b => b.type === 'text');
-  if (!textBlock) return [];
-
-  try {
-    const raw = textBlock.text.trim();
-    const clean = raw.replace(/```json|```/g, '').trim();
-    // Primer intent directe
-    try { return JSON.parse(clean).emails || []; } catch(e1) {}
-    // Segon intent: extreure objecte JSON
-    const match = raw.match(/\{[^]*"emails"[^]*\}/);
-    if (match) { try { return JSON.parse(match[0]).emails || []; } catch(e2) {} }
-    console.warn('Email parse error - resposta:', raw.substring(0, 300));
-    return [];
-  } catch(e) {
-    console.warn('Email parse error:', e);
-    return [];
-  }
-}
-
-// ─── MARK AS READ ─────────────────────────────────────────────────────────────
-async function markAsRead(emailId, itemEl) {
-  itemEl.classList.add('marking');
-  try {
-    await callClaude(
-      [{ role: "user", content: `Marca com a llegit el correu amb ID: ${emailId}. Confirma quan estigui fet.` }],
-      "Ets un assistent que gestiona el Gmail de l'usuari. Executa les accions sol·licitades.",
-      MCP_SERVERS
-    );
-    itemEl.style.transition = 'all 0.4s';
-    itemEl.style.maxHeight = '0';
-    itemEl.style.overflow = 'hidden';
-    itemEl.style.opacity = '0';
-    itemEl.style.marginBottom = '0';
-    itemEl.style.paddingTop = '0';
-    itemEl.style.paddingBottom = '0';
-    setTimeout(() => itemEl.remove(), 400);
-    showToast('✓ Marcat com a llegit');
-  } catch(e) {
-    itemEl.classList.remove('marking');
-    showToast('Error en marcar com a llegit');
-  }
-}
-
-// ─── SEND DRAFT ───────────────────────────────────────────────────────────────
-async function sendDraft(emailId, draftText, btn) {
-  btn.disabled = true;
-  btn.textContent = 'Enviant...';
-  try {
-    await callClaude(
-      [{ role: "user", content: `Crea un esborrany de resposta al correu amb ID ${emailId} amb el contingut següent i guarda'l com a esborrany a Gmail (draft, no enviar):\n\n${draftText}` }],
-      "Ets un assistent que gestiona el Gmail de l'usuari. Executa les accions sol·licitades.",
-      MCP_SERVERS
-    );
-    btn.textContent = '✓ Desat';
-    btn.className = 'btn success';
-    showToast('✓ Esborrany desat a Gmail');
-  } catch(e) {
-    btn.disabled = false;
-    btn.textContent = 'Desar esborrany';
-    showToast('Error en desar esborrany');
-  }
-}
-
-// ─── RENDER ────────────────────────────────────────────────────────────────────
 function renderCalendar(events) {
-  if (!events.length) return `<div class="placeholder">Cap event avui 🎉</div>`;
+  if (!events || !events.length) return `<div class="placeholder">Cap event avui 🎉</div>`;
   return `<div class="events-list">${events.map(ev => `
     <div class="event-card">
       <div class="event-time ${ev.allDay ? 'all-day' : ''}">
@@ -603,7 +452,6 @@ function renderCalendar(events) {
       <div class="event-body">
         <div class="event-title">${ev.title}</div>
         ${ev.location ? `<div class="event-meta">📍 ${ev.location}</div>` : ''}
-        ${ev.description ? `<div class="event-meta" style="margin-top:4px">${ev.description.substring(0,80)}${ev.description.length>80?'…':''}</div>` : ''}
       </div>
     </div>`).join('')}</div>`;
 }
@@ -613,7 +461,6 @@ function renderEmailCard(em, idx) {
   const badge = isUrgent
     ? `<span class="priority-badge urgent">⚡ Urgent</span>`
     : `<span class="priority-badge wait">○ Pot esperar</span>`;
-
   return `
   <div class="email-card" id="email-${idx}">
     <div class="email-header" onclick="toggleEmail(${idx})">
@@ -634,7 +481,7 @@ function renderEmailCard(em, idx) {
         <div id="draft-text-${idx}" contenteditable="true">${em.draft}</div>
       </div>
       <div class="email-actions">
-        <button class="btn primary" onclick="saveDraft('${em.id}', ${idx}, this)">Desar esborrany</button>
+        <button class="btn primary" onclick="copyDraft(${idx})">Copiar esborrany</button>
         <button class="btn" onclick="toggleEmail(${idx})">Tancar</button>
       </div>` : ''}
     </div>
@@ -648,60 +495,43 @@ function toggleEmail(idx) {
   chev.classList.toggle('open');
 }
 
-async function saveDraft(emailId, idx, btn) {
-  const draftEl = $(`draft-text-${idx}`);
-  await sendDraft(emailId, draftEl.textContent, btn);
+function copyDraft(idx) {
+  const text = $(`draft-text-${idx}`).textContent;
+  navigator.clipboard.writeText(text).then(() => showToast('✓ Esborrany copiat!'));
 }
 
 function renderNoReply(emails) {
-  if (!emails.length) return `<div class="placeholder">No hi ha correus pendents de llegir 📭</div>`;
+  if (!emails.length) return `<div class="placeholder">Cap correu informatiu 📭</div>`;
   return emails.map((em, i) => `
-    <div class="no-reply-item" id="nr-${i}">
+    <div class="no-reply-item">
       <div>
         <div class="nr-from">${em.from}</div>
         <div class="nr-subject">${em.subject}</div>
       </div>
-      <button class="mark-read-btn" onclick="doMarkRead('${em.id}', 'nr-${i}')">✓ Marcar llegit</button>
     </div>`).join('');
 }
 
-async function doMarkRead(emailId, elId) {
-  const el = $(elId);
-  await markAsRead(emailId, el);
-}
-
-// ─── MAIN LOAD ────────────────────────────────────────────────────────────────
 async function loadDashboard() {
   const btn = $('refresh-btn');
   btn.disabled = true;
   setStatus('loading', 'Carregant...');
   $('main-grid').innerHTML = `<div class="placeholder" style="grid-column:1/-1">
     <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
-    Connectant amb Google Calendar i Gmail…
+    Connectant amb n8n…
   </div>`;
 
   try {
-    setStatus('loading', 'Comprovant cache n8n...');
-    // Intentar càrrega ràpida des de PostgreSQL via n8n
-    const dbResult = await fetchEmailsFromDB();
-    
-    setStatus('loading', 'Calendar...');
-    let emails;
-    if (dbResult.fromDB) {
-      emails = dbResult.emails;
-      showToast('⚡ Dades carregades des de la base de dades (n8n)');
-    } else {
-      setStatus('loading', 'Analitzant emails...');
-      emails = await fetchAndAnalyzeEmails();
-    }
-    
-    const [events] = await Promise.all([fetchCalendarEvents()]);
+    const resp = await fetch(N8N_WEBHOOK);
+    if (!resp.ok) throw new Error(`n8n error: ${resp.status}`);
+    const data = await resp.json();
+
+    const emails = data.emails || [];
+    const events = data.events || [];
 
     const urgent = emails.filter(e => e.category === 'cal_resposta_urgent');
     const wait   = emails.filter(e => e.category === 'cal_resposta_espera');
     const norely = emails.filter(e => e.category === 'sense_resposta');
 
-    // Update summary
     $('sum-events').textContent = events.length;
     $('sum-urgent').textContent = urgent.length;
     $('sum-wait').textContent   = wait.length;
@@ -709,20 +539,7 @@ async function loadDashboard() {
     $('greeting-text').textContent = `${events.length} events · ${urgent.length+wait.length} correus per respondre`;
     $('summary-bar').style.display = 'flex';
 
-    // Auto mark no-reply as read
-    for (const em of norely) {
-      try {
-        await callClaude(
-          [{ role: "user", content: `Marca com a llegit el correu ID: ${em.id}` }],
-          "Gestiona el Gmail. Executa les accions.",
-          MCP_SERVERS
-        );
-      } catch(e) { /* silent */ }
-    }
-
-    // Render
     $('main-grid').innerHTML = `
-      <!-- CALENDAR full width -->
       <div class="calendar-section" style="grid-column:1/-1">
         <div class="section-header">
           <span class="section-title">📅 Events d'avui</span>
@@ -730,8 +547,6 @@ async function loadDashboard() {
         </div>
         ${renderCalendar(events)}
       </div>
-
-      <!-- URGENT -->
       <div>
         <div class="col-label">Necessiten resposta</div>
         <div class="section-header">
@@ -739,9 +554,7 @@ async function loadDashboard() {
           <span class="section-count">${urgent.length}</span>
         </div>
         ${urgent.length ? urgent.map((em,i)=>renderEmailCard(em,`u${i}`)).join('') : '<div class="placeholder">Cap correu urgent 🎉</div>'}
-
         <div style="margin-top:28px">
-          <div class="col-label" style="margin-bottom:10px">Necessiten resposta</div>
           <div class="section-header">
             <span class="section-title">○ Pot esperar</span>
             <span class="section-count">${wait.length}</span>
@@ -749,10 +562,8 @@ async function loadDashboard() {
           ${wait.length ? wait.map((em,i)=>renderEmailCard(em,`w${i}`)).join('') : '<div class="placeholder">Cap correu pendent 👌</div>'}
         </div>
       </div>
-
-      <!-- NO REPLY -->
       <div>
-        <div class="col-label">Sense resposta · marcats com a llegits automàticament</div>
+        <div class="col-label">Informatius · processats automàticament</div>
         <div class="section-header">
           <span class="section-title">📬 Informatius</span>
           <span class="section-count">${norely.length}</span>
@@ -767,8 +578,8 @@ async function loadDashboard() {
     console.error(err);
     setStatus('error', 'Error');
     $('main-grid').innerHTML = `<div class="placeholder" style="grid-column:1/-1;border-color:#dc3545;color:#9b2335">
-      ⚠ Error en carregar: ${err.message}<br><br>
-      <small>Assegura't que tens els connectors de Google Calendar i Gmail activats a Claude.ai</small>
+      ⚠ ${err.message}<br><br>
+      <small>Assegura't que el workflow de n8n està actiu i que s'ha executat avui a les 7:30h</small>
     </div>`;
     showToast('Error en carregar el dashboard');
   } finally {
