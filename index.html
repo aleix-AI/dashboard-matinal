@@ -422,6 +422,7 @@ const today = new Date();
 
 const N8N_WEBHOOK_READ = "https://n8n-production-b229.up.railway.app/webhook/dashboard-emails-avui";
 const N8N_WEBHOOK_PROCESS = "https://n8n-production-b229.up.railway.app/webhook/dashboard-process-now";
+const N8N_WEBHOOK_MARK_READ = "https://n8n-production-b229.up.railway.app/webhook/mark-read";
 
 function setDateline() {
   const days = ['Diumenge','Dilluns','Dimarts','Dimecres','Dijous','Divendres','Dissabte'];
@@ -501,14 +502,38 @@ function copyDraft(idx) {
   navigator.clipboard.writeText(text).then(() => showToast('✓ Esborrany copiat!'));
 }
 
+async function markAsRead(emailId, btn, itemEl) {
+  btn.disabled = true;
+  btn.textContent = '...';
+  try {
+    await fetch(N8N_WEBHOOK_MARK_READ, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messageId: emailId })
+    });
+    itemEl.style.transition = 'all 0.3s';
+    itemEl.style.opacity = '0';
+    itemEl.style.maxHeight = '0';
+    itemEl.style.overflow = 'hidden';
+    itemEl.style.marginBottom = '0';
+    setTimeout(() => itemEl.remove(), 300);
+    showToast('✓ Marcat com a llegit');
+  } catch(e) {
+    btn.disabled = false;
+    btn.textContent = '✓ Llegit';
+    showToast('Error en marcar com a llegit');
+  }
+}
+
 function renderNoReply(emails) {
   if (!emails.length) return `<div class="placeholder">Cap correu informatiu 📭</div>`;
   return emails.map((em, i) => `
-    <div class="no-reply-item">
-      <div>
-        <div class="nr-from">${em.from || em.from_email || '(sense remitent)'}</div>
+    <div class="no-reply-item" id="nr-${i}">
+      <div style="flex:1;min-width:0">
+        <div class="nr-from">${em.from || '(sense remitent)'}</div>
         <div class="nr-subject">${em.subject || '(sense assumpte)'}</div>
       </div>
+      <button class="mark-read-btn" onclick="markAsRead('${em.id}', this, document.getElementById('nr-${i}'))">✓ Llegit</button>
     </div>`).join('');
 }
 
